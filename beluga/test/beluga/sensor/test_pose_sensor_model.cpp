@@ -146,6 +146,27 @@ TYPED_TEST(PoseSensorModelTests, OneStdInYaw) {
   EXPECT_NEAR(std::exp(-0.5), fn(particle), 1e-4);
 }
 
+// Particle with combined 0.5σ displacements in x, y and yaw.
+// Building the particle from exp(tangent) makes the log map trivially recover
+// the tangent vector, so expected mahalanobis² = 3 * 0.25 = 0.75 regardless of
+// Jacobian coupling: weight = exp(-0.375).
+TYPED_TEST(PoseSensorModelTests, HalfStdInXYAndYaw) {
+  const auto model = TypeParam{get_default_params()};
+  auto fn = model(make_identity_measurement<TypeParam>());
+  const double dx = 0.5;  // 0.5 * sigma_x
+  const double dy = 0.5;  // 0.5 * sigma_y
+  const double dtheta = Sophus::Constants<double>::pi() / 8.0;  // 0.5 * sigma_theta
+  typename TypeParam::state_type particle;
+  if constexpr (std::is_same_v<TypeParam, Sensor2D>) {
+    particle = Sophus::SE2d::exp(Eigen::Vector3d{dx, dy, dtheta});
+  } else {
+    Eigen::Matrix<double, 6, 1> tangent;
+    tangent << dx, dy, 0.0, 0.0, 0.0, dtheta;
+    particle = Sophus::SE3d::exp(tangent);
+  }
+  EXPECT_NEAR(std::exp(-0.375), fn(particle), 1e-4);
+}
+
 // Particle displaced by 2σ along x → mahal² = 4 → weight = exp(-2).
 TYPED_TEST(PoseSensorModelTests, TwoStdInTranslationX) {
   const auto model = TypeParam{get_default_params()};

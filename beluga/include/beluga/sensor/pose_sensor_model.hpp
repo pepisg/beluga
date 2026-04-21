@@ -2,8 +2,8 @@
 #define BELUGA_SENSOR_POSE_SENSOR_MODEL_HPP
 
 // external
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
-#include <Eigen/LU>
 #include <sophus/se2.hpp>
 #include <sophus/se3.hpp>
 
@@ -91,9 +91,12 @@ class PoseSensorModel {
    * \return a state weighting function satisfying \ref StateWeightingFunctionPage
    */
   [[nodiscard]] auto operator()(measurement_type&& measurement) const {
-    const CovMatrix info = measurement.covariance.inverse();
-    return [this, pose = std::move(measurement.pose), info](const state_type& state) -> weight_type {
-      const auto error = (pose.inverse() * state).log();
+    const auto llt = measurement.covariance.llt();
+    assert(llt.info() == Eigen::ComputationInfo::Success);
+    const CovMatrix info = llt.solve(CovMatrix::Identity());
+    const state_type pose_inv = measurement.pose.inverse();
+    return [this, pose_inv = std::move(pose_inv), info](const state_type& state) -> weight_type {
+      const auto error = (pose_inv * state).log();
       return std::max(std::exp(-0.5 * error.dot(info * error)), params_.min_weight);
     };
   }
